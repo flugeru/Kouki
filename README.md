@@ -265,11 +265,7 @@ Saída em `dist\`:
 > e **fixa `GOROOT`** de propósito; um `GOROOT` deixado de outra instalação gera
 > `compile: version "go1.27.2" does not match go tool version "go1.27.0"`.
 
-Para regenerar o payload do MPV a partir do seu MPV:
 
-```powershell
-.\tools\prepare-mpv.ps1 -Source "$env:USERPROFILE\Documents\mpv"
-```
 
 ---
 
