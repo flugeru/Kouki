@@ -1,5 +1,5 @@
 ; ============================================================================
-;  Kouki 1.0.0 — instalador
+;  Kouki 1.0.1 - instalador
 ;
 ;  Compilado por Inno Setup 6 (ISCC.exe).
 ;  Uso:  ISCC.exe installer\kouki.iss
@@ -20,12 +20,12 @@
 ; ============================================================================
 
 #define AppName        "Kouki"
-#define AppVersion     "1.0.0"
+#define AppVersion     "1.0.1"
 #define AppPublisher   "Kouki"
 #define AppExeName     "Kouki.exe"
 
 ; Nome do pacote final (o usuario baixa esse arquivo).
-#define OutputBaseName "Kouki-1.0.0-Setup"
+#define OutputBaseName "Kouki-1.0.1-Setup"
 
 [Setup]
 AppId={{7B1E0C4A-5D62-4F39-9A17-6C0E2D8B4A55}

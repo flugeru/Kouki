@@ -43,7 +43,7 @@ Repositório: <https://github.com/flugeru/Kouki>
 
 ## Instalação
 
-Execute **`Kouki-1.0.0-Setup.exe`**.
+Execute **`Kouki-1.0.1-Setup.exe`**.
 
 O instalador é *per-user*: grava em `%LOCALAPPDATA%\Programs\Kouki` e **não pede
 privilégios de administrador**.
@@ -257,7 +257,7 @@ iscc installer\kouki.iss
 
 Saída em `dist\`:
 
-- `Kouki-1.0.0-Setup.exe` — instalador
+- `Kouki-1.0.1-Setup.exe` — instalador
 - `COMO-INSTALAR.txt`
 - `kouki.ico`, `THIRD-PARTY-NOTICES.md`
 
