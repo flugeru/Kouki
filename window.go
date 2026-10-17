@@ -378,10 +378,36 @@ func guiAction(name string) {
 			messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 			return
 		}
+		// Guard against a login already in progress: a second listener on the
+		// same port is what produced "bind: only one usage of each socket
+		// address is normally permitted". Cancel the running one first, mirroring
+		// the tray handler.
+		malLoginCancelMu.Lock()
+		if malLoginCancelFunc != nil {
+			malLoginCancelFunc()
+			malLoginCancelFunc = nil
+			malLoginCancelMu.Unlock()
+			return
+		}
+		malLoginCancelMu.Unlock()
+
 		go func() {
-			if err := malOAuthLogin(context.Background(), cfg); err != nil {
+			loginCtx, loginCancel := context.WithCancel(context.Background())
+			malLoginCancelMu.Lock()
+			malLoginCancelFunc = loginCancel
+			malLoginCancelMu.Unlock()
+
+			if err := malOAuthLogin(loginCtx, cfg); err != nil && err != context.Canceled {
 				guiError("Kouki: MyAnimeList", err.Error())
 			}
+
+			malLoginCancelMu.Lock()
+			malLoginCancelFunc = nil
+			malLoginCancelMu.Unlock()
+
+			store.Load()
+			refreshAuthMenu()
+			refreshGui()
 		}()
 	case "mal-logout":
 		store.ClearMAL()

@@ -38,6 +38,7 @@ import (
 	"github.com/huin/goupnp/dcps/internetgateway1"
 	"github.com/huin/goupnp/dcps/internetgateway2"
 	natpmp "github.com/jackpal/go-nat-pmp"
+	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/registry"
 )
 
@@ -4521,7 +4522,20 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	}
 	challenge := verifier
 
-	ln, err := net.Listen("tcp", addr)
+	// SO_REUSEADDR lets a new login bind even when a previous attempt left the
+	// port in TIME_WAIT (Windows holds it for a while after close). Without it a
+	// second "Entrar" click, or a login right after a cancelled one, fails with
+	// WSAEADDRINUSE even though nothing is actually listening.
+	lc := net.ListenConfig{
+		Control: func(network, address string, c syscall.RawConn) error {
+			return c.Control(func(fd uintptr) {
+				// SO_REUSEADDR on Windows also permits rebinding to a port in
+				// TIME_WAIT, which is exactly the case we need.
+				_ = windows.SetsockoptInt(windows.Handle(fd), windows.SOL_SOCKET, windows.SO_REUSEADDR, 1)
+			})
+		},
+	}
+	ln, err := lc.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("could not listen for MAL callback on %s: %w", addr, err)
 	}
