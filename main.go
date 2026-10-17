@@ -4485,9 +4485,6 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	if strings.TrimSpace(cfg.MALClientID) == "" {
 		return errors.New("missing MAL client id (set MAL_CLIENT_ID)")
 	}
-	if strings.TrimSpace(cfg.MALClientSecret) == "" {
-		return errors.New("missing MAL client secret")
-	}
 	redir := strings.TrimSpace(cfg.MALRedirectURI)
 	if redir == "" {
 		redir = "http://" + localMALLoginAddr + "/callback"
