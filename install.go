@@ -242,7 +242,7 @@ func openInstallFolder() {
 	if dir == "" || !fileExists(dir) {
 		dir = InstallRoot()
 	}
-	if err := hiddenCmd("explorer.exe", dir).Start(); err != nil {
+	if err := exec.Command("explorer.exe", dir).Start(); err != nil {
 		messageBox(appName,
 			"Não foi possível abrir a pasta:\n\n"+dir, mbOK|mbIconError)
 	}
@@ -254,7 +254,7 @@ func openFolder(dir string) {
 		messageBox(appName, "Pasta não encontrada:\n\n"+dir, mbOK|mbIconWarning)
 		return
 	}
-	if err := hiddenCmd("explorer.exe", dir).Start(); err != nil {
+	if err := exec.Command("explorer.exe", dir).Start(); err != nil {
 		messageBox(appName, "Não foi possível abrir a pasta:\n\n"+dir, mbOK|mbIconError)
 	}
 }
@@ -267,7 +267,7 @@ func runSetupExe() error {
 	if setup == "" {
 		return errors.New("instalador (" + setupExeName + ") não encontrado")
 	}
-	cmd := hiddenCmd(setup)
+	cmd := exec.Command(setup)
 	cmd.Dir = filepath.Dir(setup)
 	return cmd.Start()
 }

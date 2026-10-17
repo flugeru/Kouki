@@ -18,6 +18,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"regexp"
@@ -4092,7 +4093,7 @@ func urlQueryEscape(s string) string {
 }
 
 func openBrowser(u string) {
-	_ = hiddenCmd("rundll32", "url.dll,FileProtocolHandler", u).Start()
+	_ = exec.Command("rundll32", "url.dll,FileProtocolHandler", u).Start()
 }
 
 func oauthLogin(ctx context.Context) error {

@@ -595,7 +595,7 @@ func (p *mpvPlayer) Launch(exe string, opt mpvLaunchOptions) error {
 	}
 	args = append(args, opt.Files...)
 
-	cmd := hiddenCmd(exe, args...)
+	cmd := exec.Command(exe, args...)
 	// The player's own folder, which is where Explorer's double-click would also
 	// start it. Note that portable_config is located next to the *executable*,
 	// not relative to this directory — an earlier comment here claimed otherwise.
