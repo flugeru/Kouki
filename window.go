@@ -101,13 +101,14 @@ var guiFoundMpv []mpvCandidate
 var mpvScanOnce sync.Once
 
 // malCredentialsHint explains how to supply the MyAnimeList OAuth credentials.
-const malCredentialsHint = "ID/segredo do cliente MAL ausente.\n\n" +
-	"O login do MyAnimeList usa authorization-code e exige um ID e um SEGREDO " +
-	"que so o dono do aplicativo MAL possui. O Kouki nao os distribui.\n\n" +
-	"Registre seu proprio app em https://myanimelist.net/apiconfig " +
-	"e defina:\n" +
+const malCredentialsHint = "ID do cliente MAL ausente.\n\n" +
+	"O login do MyAnimeList usa authorization-code. O Kouki ja vem com um " +
+	"client id embutido, entao na maioria dos casos nao e necessario " +
+	"configurar nada.\n\n" +
+	"Se preferir usar seu proprio app (recomendado para uso em producao), " +
+	"registre em https://myanimelist.net/apiconfig e defina:\n" +
 	"    setx MAL_CLIENT_ID \"<seu id>\"\n" +
-	"    setx MAL_CLIENT_SECRET \"<seu segredo>\"\n\n" +
+	"    setx MAL_CLIENT_SECRET \"<seu segredo>\"  (opcional, com PKCE)\n\n" +
 	"Depois reinicie o terminal e o Kouki."
 
 // guiError shows a message box, marshalling onto walk's thread when called from
@@ -374,7 +375,7 @@ func guiAction(name string) {
 	case "mal-login":
 		// The tray performs this same guard before starting; without it here the
 		// button looked completely dead whenever MAL credentials are missing.
-		if strings.TrimSpace(cfg.MALClientID) == "" || strings.TrimSpace(cfg.MALClientSecret) == "" {
+		if strings.TrimSpace(cfg.MALClientID) == "" {
 			messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 			return
 		}
