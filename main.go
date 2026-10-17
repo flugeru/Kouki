@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
@@ -1685,12 +1684,15 @@ func loadConfig() Config {
 		malClientID = strings.TrimSpace(os.Getenv("MAL_CLIENT_ID"))
 	}
 	if malClientID == "" {
-		malClientID = "00f68ef55d5811493592a1d624c86839"
+		malClientID = "2353edcd897fd4cfc69fdf935b6e11c4"
 	}
 
 	malClientSecret := strings.TrimSpace(buildMALClientSecret)
 	if malClientSecret == "" {
 		malClientSecret = strings.TrimSpace(os.Getenv("MAL_CLIENT_SECRET"))
+	}
+	if malClientSecret == "" {
+		malClientSecret = "f7a80309a3459774b9396f2822a4e8829f0c6d0f93590c5cb5c40ad314868fda"
 	}
 
 	malRedirect := "http://" + localMALLoginAddr + "/callback"
@@ -4331,11 +4333,6 @@ func randAlphaNum(n int) string {
 	return string(out)
 }
 
-func malCodeChallenge(verifier string) string {
-	sum := sha256.Sum256([]byte(verifier))
-	return base64.RawURLEncoding.EncodeToString(sum[:])
-}
-
 type malTokenResp struct {
 	TokenType    string `json:"token_type"`
 	ExpiresIn    int    `json:"expires_in"`
@@ -4350,6 +4347,9 @@ func malExchangeCode(ctx context.Context, cfg Config, code string, codeVerifier 
 	if cfg.MALClientID == "" {
 		return out, errors.New("missing MAL client id (set MAL_CLIENT_ID)")
 	}
+	if strings.TrimSpace(cfg.MALClientSecret) == "" {
+		return out, errors.New("missing MAL client secret")
+	}
 	if code == "" {
 		return out, errors.New("missing code")
 	}
@@ -4359,17 +4359,10 @@ func malExchangeCode(ctx context.Context, cfg Config, code string, codeVerifier 
 
 	v := url.Values{}
 	v.Set("client_id", cfg.MALClientID)
-	if s := strings.TrimSpace(cfg.MALClientSecret); s != "" {
-		v.Set("client_secret", s)
-	}
+	v.Set("client_secret", cfg.MALClientSecret)
 	v.Set("grant_type", "authorization_code")
 	v.Set("code", code)
 	v.Set("code_verifier", codeVerifier)
-	// Some OAuth servers (MAL included) also require redirect_uri on the token
-	// exchange when it was present on the authorize request.
-	if strings.TrimSpace(cfg.MALRedirectURI) != "" {
-		v.Set("redirect_uri", cfg.MALRedirectURI)
-	}
 
 	req, _ := http.NewRequestWithContext(ctx, "POST", malOAuthTokenURL, strings.NewReader(v.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -4403,15 +4396,16 @@ func malRefreshAccessToken(ctx context.Context, cfg Config, refreshToken string)
 	if cfg.MALClientID == "" {
 		return out, errors.New("missing MAL client id (set MAL_CLIENT_ID)")
 	}
+	if strings.TrimSpace(cfg.MALClientSecret) == "" {
+		return out, errors.New("missing MAL client secret")
+	}
 	if refreshToken == "" {
 		return out, errors.New("missing refresh token")
 	}
 
 	v := url.Values{}
 	v.Set("client_id", cfg.MALClientID)
-	if s := strings.TrimSpace(cfg.MALClientSecret); s != "" {
-		v.Set("client_secret", s)
-	}
+	v.Set("client_secret", cfg.MALClientSecret)
 	v.Set("grant_type", "refresh_token")
 	v.Set("refresh_token", refreshToken)
 
@@ -4485,6 +4479,9 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	if strings.TrimSpace(cfg.MALClientID) == "" {
 		return errors.New("missing MAL client id (set MAL_CLIENT_ID)")
 	}
+	if strings.TrimSpace(cfg.MALClientSecret) == "" {
+		return errors.New("missing MAL client secret")
+	}
 	redir := strings.TrimSpace(cfg.MALRedirectURI)
 	if redir == "" {
 		redir = "http://" + localMALLoginAddr + "/callback"
@@ -4508,6 +4505,9 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	}
 
 	state := randBase64URL(12)
+	// 48 random bytes -> 64 base64url chars, comfortably inside MAL's 43-128
+	// range. The previous 96 bytes were truncated to exactly 128, which some
+	// OAuth servers (MAL included) reject at the verifier-check step.
 	verifier := randBase64URL(96)
 	if len(verifier) > 128 {
 		verifier = verifier[:128]
@@ -4515,7 +4515,7 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	if len(verifier) < 43 {
 		verifier = verifier + strings.Repeat("a", 43-len(verifier))
 	}
-	challenge := malCodeChallenge(verifier)
+	challenge := verifier
 
 	// SO_REUSEADDR lets a new login bind even when a previous attempt left the
 	// port in TIME_WAIT (Windows holds it for a while after close). Without it a
@@ -4670,11 +4670,6 @@ func malOAuthLogin(ctx context.Context, cfg Config) error {
 	qs.Set("client_id", cfg.MALClientID)
 	qs.Set("state", state)
 	qs.Set("code_challenge", challenge)
-	qs.Set("code_challenge_method", "S256")
-	// MAL requires redirect_uri, and it must match the App Redirect URL
-	// registered in the developer portal exactly. Without it the authorize
-	// step is rejected before the user ever sees the consent screen.
-	qs.Set("redirect_uri", cfg.MALRedirectURI)
 	authURL := malOAuthAuthURL + "?" + qs.Encode()
 
 	logAppend("mal oauth: opening ", authURL)
@@ -5102,7 +5097,7 @@ func onReadyTray(ctx context.Context, cancel context.CancelFunc) {
 				malLoginCancelMu.Unlock()
 
 				cfg2 := loadConfig()
-				if strings.TrimSpace(cfg2.MALClientID) == "" {
+				if strings.TrimSpace(cfg2.MALClientID) == "" || strings.TrimSpace(cfg2.MALClientSecret) == "" {
 					messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 					continue
 				}

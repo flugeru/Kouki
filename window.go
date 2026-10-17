@@ -375,7 +375,7 @@ func guiAction(name string) {
 	case "mal-login":
 		// The tray performs this same guard before starting; without it here the
 		// button looked completely dead whenever MAL credentials are missing.
-		if strings.TrimSpace(cfg.MALClientID) == "" {
+		if strings.TrimSpace(cfg.MALClientID) == "" || strings.TrimSpace(cfg.MALClientSecret) == "" {
 			messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 			return
 		}
