@@ -35,9 +35,9 @@ Repositório: <https://github.com/flugeru/Kouki>
 
 ![Janela principal do Kouki](assets/screenshots/interface.png)
 
-### Presença rica
+### Rich presence
 
-![Presença rica no Discord](assets/screenshots/rich-precense.png)
+![Rich presence](assets/screenshots/rich-presence.png)
 
 ---
 
