@@ -770,8 +770,9 @@ func guiScanMpvOnStartup() {
 				setSelectedMpvUI(chosen.Path)
 				if err := EnsureMpvIpcConfig(chosen.Path); err != nil {
 					refreshGuiSafe()
-					guiError(appName, "MPV encontrado em\n"+chosen.Path+
-						"\n\nMas o mpv.conf não pôde ser ajustado:\n"+err.Error())
+					guiMessage(appName, "MPV encontrado em\n"+chosen.Path+
+						"\n\nMas o mpv.conf não pôde ser ajustado:\n"+err.Error(),
+						mbOK|mbIconError)
 					return
 				}
 				refreshGuiSafe()
@@ -781,9 +782,10 @@ func guiScanMpvOnStartup() {
 			// Nothing installed: lay down the bundled copy for this user.
 			exe, installed, err := InstallAndConfigureMpv(BundledMpvInstallDir())
 			if err != nil {
-				guiError(appName,
+				guiMessage(appName,
 					"Nenhum MPV encontrado e a instalação automática falhou.\n\n"+err.Error()+
-						"\n\nUse “Instalar MPV” na aba Reprodução para tentar de novo.")
+						"\n\nUse “Instalar MPV” na aba Reprodução para tentar de novo.",
+					mbOK|mbIconError)
 				return
 			}
 
@@ -792,11 +794,12 @@ func guiScanMpvOnStartup() {
 			logAppend("mpv: instalado em ", exe, " (novo=", fmt.Sprint(installed), ")")
 
 			if installed {
-				guiError(appName,
+				guiMessage(appName,
 					"Nenhum MPV estava instalado.\n\n"+
 						"O MPV que acompanha o "+appName+" foi instalado em:\n"+exe+
 						"\n\nEle já está com o canal IPC configurado, então o Kouki"+
-						" acompanha a reprodução assim que você começar a assistir.")
+						" acompanha a reprodução assim que você começar a assistir.",
+					mbOK|mbIconInfo)
 			}
 		}()
 	})
@@ -832,10 +835,11 @@ func watchMpvStart(exe string) {
 		if !guiPlayer.IsRunning() {
 			// reap already recorded the exit code and what the player wrote.
 			logAppend("mpv: encerrou antes de abrir o canal IPC")
-			guiError(appName,
+			guiMessage(appName,
 				"O MPV iniciou e em seguida encerrou.\n\n"+
 					"O log do player explica o motivo:\n"+
-					filepath.Join(ConfigDir(), "mpv.log"))
+					filepath.Join(ConfigDir(), "mpv.log"),
+				mbOK|mbIconError)
 			return
 		}
 		if e := sharedMpvConn.LastError(); e != "" && firstFailure == "" {
@@ -865,11 +869,12 @@ func watchMpvStart(exe string) {
 	logAppend("mpv: canal IPC não apareceu em ", time.Since(start).Round(time.Millisecond).String(),
 		"; ultima falha: ", firstFailure)
 
-	guiError(appName,
+	guiMessage(appName,
 		"O MPV está aberto, mas o canal IPC não apareceu.\n\n"+
 			"O arquivo que o mpv lê é:\n"+cfgPath+detail+
 			"\n\nO player continua aberto: você pode usá-lo normalmente. "+
-			"Os controles do Kouki só funcionam quando o canal responde.")
+			"Os controles do Kouki só funcionam quando o canal responde.",
+		mbOK|mbIconWarning)
 }
 
 // guiNoMpv explains that nothing was found anywhere and offers the installer.

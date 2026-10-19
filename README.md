@@ -26,7 +26,7 @@ Repositório: <https://github.com/flugeru/Kouki>
 
 ## Instalação
 
-Execute **`Kouki-1.0.1-Setup.exe`**.
+Execute **`Kouki-1.0.2-Setup.exe`**.
 
 O instalador é *per-user*: grava em `%LOCALAPPDATA%\Programs\Kouki` e **não pede privilégios de administrador**.
 
@@ -102,7 +102,7 @@ Requisitos: **Go 1.26+** e **Inno Setup 6**.
 .\tools\build.ps1 -SkipInstaller     # sem o instalador
 ```
 
-Saída em `dist\`: `Kouki-1.0.1-Setup.exe`, `COMO-INSTALAR.txt`, `kouki.ico`, `THIRD-PARTY-NOTICES.md`.
+Saída em `dist\`: `Kouki-1.0.2-Setup.exe`, `COMO-INSTALAR.txt`, `kouki.ico`, `THIRD-PARTY-NOTICES.md`.
 
 ---
 

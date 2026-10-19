@@ -12,13 +12,13 @@
     "Comments": "Contas, reproducao e progresso, com MPV empacotado.",
     "CompanyName": "Kouki",
     "FileDescription": "Kouki - Contas, reproducao e progresso",
-    "FileVersion": "1.0.1",
+    "FileVersion": "1.0.2",
     "InternalName": "Kouki",
     "LegalCopyright": "Copyright (c) 2026 Kouki",
     "OriginalFilename": "Kouki.exe",
     "PrivateBuild": "",
     "ProductName": "Kouki",
-    "ProductVersion": "1.0.1",
+    "ProductVersion": "1.0.2",
     "SpecialBuild": ""
   },
   "VarFileInfo": {

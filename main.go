@@ -5410,6 +5410,7 @@ func runWithTray(mainfn func(context.Context), onExit func()) {
 
 var (
 	user32          = syscall.NewLazyDLL("user32.dll")
+	kernel32        = syscall.NewLazyDLL("kernel32.dll")
 	procMessageBoxW = user32.NewProc("MessageBoxW")
 )
 
@@ -5435,13 +5436,103 @@ func messageBox(title, text string, style uint32) int {
 
 	t, _ := syscall.UTF16PtrFromString(text)
 	c, _ := syscall.UTF16PtrFromString(title)
+
+	// If this is the MPV install notification, swap the system info icon for
+	// the MPV icon via a CBT hook. The hook fires before the MessageBox window
+	// becomes visible, so the user never sees the default icon.
+	if style&mbIconInfo != 0 && mpvIconHook.mpvIcoPath != "" {
+		mpvIconHook.install()
+	}
+
 	r, _, _ := procMessageBoxW.Call(
 		0,
 		uintptr(unsafe.Pointer(t)),
 		uintptr(unsafe.Pointer(c)),
 		uintptr(style),
 	)
+
+	if style&mbIconInfo != 0 && mpvIconHook.mpvIcoPath != "" {
+		mpvIconHook.remove()
+	}
+
 	return int(r)
+}
+
+// mpvIconHook replaces the MessageBox system icon with the MPV icon.
+//
+// MessageBoxW creates its dialog on the caller's thread and enters a modal
+// loop, so a CBT hook on this thread intercepts the dialog window creation
+// before the first paint. The hook loads the MPV .ico and sends WM_SETICON
+// for both the big (title bar) and small (taskbar) slots.
+type mpvIconHookT struct {
+	hook       uintptr
+	mpvIcoPath string
+}
+
+var mpvIconHook = mpvIconHookT{mpvIcoPath: `C:\Users\Flugel\Downloads\mpv-icon.ico`}
+
+var (
+	procSetWindowsHookEx  = user32.NewProc("SetWindowsHookExW")
+	procCallNextHookEx    = user32.NewProc("CallNextHookEx")
+	procUnhookWindowsHook = user32.NewProc("UnhookWindowsHookEx")
+	procSendMessageW      = user32.NewProc("SendMessageW")
+	procLoadImageW        = user32.NewProc("LoadImageW")
+	procGetCurrentThread  = kernel32.NewProc("GetCurrentThreadId")
+)
+
+const (
+	whCbt          = 5
+	hcbtCreateWnd  = 3
+	wmSetIcon      = 0x0080
+	imageIcon      = 1
+	lrLoadFromFile = 0x0010
+	iconBig        = 0
+	iconSmall      = 1
+)
+
+func (h *mpvIconHookT) install() {
+	if h.hook != 0 {
+		return
+	}
+	tidPtr, _, _ := procGetCurrentThread.Call()
+	tid := uint32(tidPtr)
+
+	cb := syscall.NewCallback(func(nCode int32, wParam, lParam uintptr) uintptr {
+		if nCode == hcbtCreateWnd {
+			if ico := loadMPVIcon(); ico != 0 {
+				procSendMessageW.Call(wParam, wmSetIcon, iconBig, ico)
+				procSendMessageW.Call(wParam, wmSetIcon, iconSmall, ico)
+			}
+		}
+		nextPtr, _, _ := procCallNextHookEx.Call(0, uintptr(nCode), wParam, lParam)
+		return nextPtr
+	})
+
+	hookPtr, _, _ := procSetWindowsHookEx.Call(
+		uintptr(whCbt),
+		cb,
+		0,
+		uintptr(tid),
+	)
+	h.hook = hookPtr
+}
+
+func (h *mpvIconHookT) remove() {
+	if h.hook != 0 {
+		procUnhookWindowsHook.Call(h.hook)
+		h.hook = 0
+	}
+}
+
+// loadMPVIcon loads the first icon from the MPV .ico file.
+// Returns 0 if the file is missing or cannot be loaded.
+func loadMPVIcon() uintptr {
+	if mpvIconHook.mpvIcoPath == "" {
+		return 0
+	}
+	p, _ := syscall.UTF16PtrFromString(mpvIconHook.mpvIcoPath)
+	ret, _, _ := procLoadImageW.Call(0, uintptr(unsafe.Pointer(p)), imageIcon, 0, 0, lrLoadFromFile)
+	return ret
 }
 
 // main is the entry point for BOTH the bootstrapper and the installed
