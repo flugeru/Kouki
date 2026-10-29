@@ -78,6 +78,15 @@ portuguese.CreateDesktopIcon=Criar atalho na Area de Trabalho
 portuguese.LaunchApplication=Executar o {#AppName}
 portuguese.RunAsOriginalUser=Executar o {#AppName} como o usuario atual
 
+[Types]
+Name: "full"; Description: "Kouki com MPV"
+Name: "compact"; Description: "Apenas Kouki"
+Name: "custom"; Description: "Personalizada"; Flags: iscustom
+
+[Components]
+Name: "main"; Description: "Kouki"; Types: full compact custom; Flags: fixed
+Name: "mpv"; Description: "MPV com configuracao do Kouki"; Types: full
+
 [Tasks]
 ; O bit "checked" NAO e uma flag valida de [Tasks] no Inno Setup 6. As flags
 ; aceitas sao apenas: checkablealone, checkedonce, dontinheritcheck, exclusive,
@@ -103,8 +112,8 @@ Source: "..\README.md";            DestDir: "{app}"; Flags: ignoreversion
 ; mpv.exe sobe ao lado do portable_config\, que e a pasta que o proprio mpv
 ; carrega automaticamente quando encontra o executavel. E assim que os presets,
 ; scripts e shaders do usuario chegam intactos ate a maquina instalada.
-Source: "..\assets\mpv\*"; DestDir: "{app}\mpv"; \
-    Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+Source: "..\assets\mpv\*"; DestDir: "{app}\mpv"; Components: mpv; \
+    Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Registry]
 ; A tarefa "autostart" era oferecida (e marcada por padrao), mas nenhuma entrada
@@ -124,67 +133,3 @@ Filename: "{app}\{#AppExeName}"; \
     Description: "{cm:LaunchApplication,{#AppName}}"; \
     Flags: nowait postinstall skipifsilent
 
-[Code]
-// ---------------------------------------------------------------------------
-// Validacao antes de comecar a copiar.
-// ---------------------------------------------------------------------------
-function InitializeSetup(): Boolean;
-var
-  FreeMB, TotalMB: Cardinal;
-  NeedMB: Cardinal;
-begin
-  Result := True;
-
-  // O programa + o MPV empacotado (~127 MB) precisam de folga para extrair.
-  //
-  // GetSpaceOnDisk(Path, InMegabytes, var Free, var Total): quatro parametros.
-  // InMegabytes = True devolve MEGABYTES (2^20) e evita o teto de 2^31-1 bytes
-  // que a variante em bytes impoe, entao a comparacao e feita em MB.
-  NeedMB := 420;
-  if not GetSpaceOnDisk(ExpandConstant('{app}'), True, FreeMB, TotalMB) then
-  begin
-    // Nao deu para medir o disco. Avisamos e seguimos em vez de bloquear uma
-    // instalacao que pode estar perfeitamente correta.
-    MsgBox('Nao foi possivel verificar o espaco livre em ' + ExpandConstant('{app}') + '.', mbError, MB_OK);
-    Exit; // Result continua True
-  end;
-
-  if FreeMB < NeedMB then
-  begin
-    MsgBox(
-      'Espaco insuficiente.' + #13#10 + #13#10 +
-      'O {#AppName} precisa de aproximadamente ' + IntToStr(NeedMB) +
-      ' MB livres (programa + MPV).' + #13#10 +
-      'Desinstale o {#AppName} existente ou libere espaco e tente novamente.',
-      mbError, MB_OK);
-    Result := False;
-  end;
-end;
-
-// ---------------------------------------------------------------------------
-// A entrada do Painel de Controle e criada pelo proprio Inno Setup a partir de
-// AppId, o que cobre instalar, reparar, modificar e desinstalar.
-//
-// Este passo apenas garante que o icone exibido ali seja o do Kouki.
-// ---------------------------------------------------------------------------
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if CurStep = ssPostInstall then
-  begin
-    // Nada obrigatorio: o Inno Setup ja registrou tudo. O gancho existe para o
-    // comportamento do icone ficar explicito e documentado no codigo.
-  end;
-end;
-
-// ---------------------------------------------------------------------------
-// Limpeza na desinstalacao: as configuracoes e tokens do usuario sao
-// preservados por padrao. Este gancho existe para o usuario poder remove-los
-// de forma explicita, sem precisar explorar pastas.
-// ---------------------------------------------------------------------------
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  if CurUninstallStep = usPostUninstall then
-  begin
-    // Nada a fazer: %APPDATA%\Kouki fica intacto de proposito.
-  end;
-end;
