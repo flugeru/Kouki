@@ -5384,15 +5384,13 @@ func messageBox(title, body string, style uint32) int {
 	return idOK
 }
 
-// main is the entry point for BOTH the bootstrapper and the installed
-// application. The same binary acts as installer until it has been installed.
-//
-// Decision table (see install.go):
-//
-//	valid install + we ARE the installed copy  -> run the tray app
-//	valid install + we are a stray bootstrapper -> hand off, then exit
-//	no valid install                            -> run the installer, never the tray
+// main starts the Linux app from a regular executable or AppImage.
 func main() {
+	if len(os.Args) == 2 && (strings.EqualFold(os.Args[1], "--version") || strings.EqualFold(os.Args[1], "-version")) {
+		fmt.Printf("%s %s (%s/%s)\n", appName, appVersion, runtime.GOOS, runtime.GOARCH)
+		return
+	}
+
 	release, err := acquireSingleInstanceGuard()
 	if err != nil {
 		// Another copy already owns the tray icon and the main window; exit quietly

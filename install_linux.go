@@ -13,7 +13,7 @@ import (
 
 const (
 	appName      = "Kouki"
-	appVersion   = "1.0.2"
+	appVersion   = "1.1.0"
 	appTagline   = "Contas, reprodução e progresso"
 	iconFileName = "kouki.png"
 	legacyName   = "Koushin"

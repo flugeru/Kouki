@@ -2,7 +2,7 @@ name: Windows CI
 
 on:
   push:
-    branches: [main, refactor/windows-review]
+    branches: [main, refactor/windows-review, feature/linux-appimage]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -21,6 +21,12 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Atualizar metadados do executável
+        shell: pwsh
+        run: |
+          go run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.7.0 -64 -o kouki_windows.syso -icon kouki.ico -application-icon kouki.ico -manifest kouki.exe.manifest -propagate-ver-strings versioninfo.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Testar
         run: go test ./...
 
@@ -33,13 +39,19 @@ jobs:
           go build -trimpath -o Kouki-smoke.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $version = & .\Kouki-smoke.exe --version
-          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^Kouki [0-9]+\.[0-9]+') {
+          if ($LASTEXITCODE -ne 0 -or $version -ne 'Kouki 1.1.0 (windows/amd64)') {
             throw "Versão inesperada: $version"
           }
 
       - name: Compilar aplicativo Windows
         shell: pwsh
         run: |
-          go build -trimpath -ldflags='-H=windowsgui -s -w' -o Kouki.exe .
+          go build -trimpath -ldflags='-H=windowsgui -s -w' -o Kouki-1.1.0-Windows-x86_64.exe .
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          if (-not (Test-Path -LiteralPath Kouki.exe)) { throw 'Kouki.exe não foi gerado' }
+          if (-not (Test-Path -LiteralPath Kouki-1.1.0-Windows-x86_64.exe)) { throw 'Kouki.exe não foi gerado' }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Kouki-1.1.0-Windows-x86_64
+          path: Kouki-1.1.0-Windows-x86_64.exe
+          if-no-files-found: error

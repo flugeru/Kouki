@@ -55,6 +55,7 @@ jobs:
           "$image" --appimage-extract >/dev/null
           test -x squashfs-root/AppRun
           test -x squashfs-root/usr/bin/kouki
+          test "$(squashfs-root/usr/bin/kouki --version)" = "Kouki 1.1.0 (linux/$(go env GOARCH))"
           test -f squashfs-root/kouki.desktop
           test -f squashfs-root/kouki.png
           desktop-file-validate squashfs-root/kouki.desktop
@@ -65,6 +66,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Kouki-Linux-${{ matrix.arch }}
+          name: Kouki-1.1.0-Linux-${{ matrix.arch }}
           path: dist/Kouki-*-${{ matrix.arch }}.AppImage
           if-no-files-found: error

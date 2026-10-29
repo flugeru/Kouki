@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Build do Kouki 1.0.2: gera o executavel e compila o instalador Inno Setup.
+    Build do Kouki 1.1.0: gera o executavel e compila o instalador Inno Setup.
 
 .DESCRIPTION
     Pipeline completo:
@@ -157,7 +157,7 @@ if ($SkipInstaller) {
     Ok "usando $iscc"
     & $iscc (Join-Path $root 'installer\kouki.iss')
     if ($LASTEXITCODE -ne 0) { Bad 'ISCC falhou'; exit 1 }
-    Good 'dist\Kouki-1.0.2-Setup.exe'
+    Good 'dist\Kouki-1.1.0-Setup.exe'
 }
 
 # --- 8. stage --------------------------------------------------------------
@@ -167,19 +167,19 @@ Step 'Montando dist/'
 $dist = Join-Path $root 'dist'
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
-if (Test-Path (Join-Path $dist 'Kouki-1.0.2-Setup.exe')) {
-    Good ("Kouki-1.0.2-Setup.exe  {0:N1} MB" -f ((Get-Item (Join-Path $dist 'Kouki-1.0.2-Setup.exe')).Length/1MB))
+if (Test-Path (Join-Path $dist 'Kouki-1.1.0-Setup.exe')) {
+    Good ("Kouki-1.1.0-Setup.exe  {0:N1} MB" -f ((Get-Item (Join-Path $dist 'Kouki-1.1.0-Setup.exe')).Length/1MB))
 }
 Copy-Item .\THIRD-PARTY-NOTICES.md $dist -Force
 Copy-Item .\kouki.ico $dist -Force
 
 @"
-Kouki 1.0.2
+Kouki 1.1.0
 ===========
 
 Instalar
 --------
-Execute Kouki-1.0.2-Setup.exe. O instalador faz a instalacao apenas para o seu
+Execute Kouki-1.1.0-Setup.exe. O instalador faz a instalacao apenas para o seu
 usuario e NAO pede privilegios de administrador:
 
     programa : %LOCALAPPDATA%\Programs\Kouki

@@ -30,7 +30,7 @@ O [fluxo Linux AppImage](https://github.com/flugeru/Kouki/actions/workflows/linu
 
 ## Windows (instalador)
 
-Execute **`Kouki-1.0.2-Setup.exe`**.
+Execute **`Kouki-1.1.0-Setup.exe`**.
 
 O instalador é *per-user*: grava em `%LOCALAPPDATA%\Programs\Kouki` e **não pede privilégios de administrador**.
 
@@ -113,7 +113,7 @@ script reutiliza somente o conteúdo já preparado em `assets\mpv` e não
 copia arquivos do perfil do usuário. Com `-SkipInstaller`, o executável
 pode usar uma instalação externa do MPV.
 
-Saída em `dist\` quando o instalador é incluído: `Kouki-1.0.2-Setup.exe`,
+Saída em `dist\` quando o instalador é incluído: `Kouki-1.1.0-Setup.exe`,
 `COMO-INSTALAR.txt`, `kouki.ico`, `THIRD-PARTY-NOTICES.md`.
 
 ---
