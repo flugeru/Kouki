@@ -6,21 +6,19 @@
     Pipeline completo:
 
       1. localizar um toolchain Go consistente
-      2. preparar o payload do MPV a partir da pasta do usuario (opcional)
+      2. preparar o payload do MPV quando -MpvSource for informado
       3. regenerar kouki.ico a partir do PNG de origem
       4. regenerar kouki_windows.syso (icone + versao + manifest) via goversioninfo
-      5. resolver modulos
+      5. compilar com go.mod/go.sum somente para leitura
       6. go build -> Kouki.exe
       7. compilar o instalador com ISCC (installer\kouki.iss)
       8. montar dist\
 
-    Todo passo e idempotente.
-
-    NOTA: este script nao executa testes automatizados. O projeto nao os utiliza.
+    O build sem instalador funciona sem Inno Setup e sem mpv.exe embutido.
 
 .PARAMETER MpvSource
-    Pasta com o mpv.exe / portable_config do usuario. Se omitida (ou inexistente)
-    o payload ja preparado em assets\mpv e reutilizado.
+    Pasta com o mpv.exe / portable_config a incluir. Se omitida, o conteudo
+    ja preparado em assets\mpv e reutilizado sem acessar pastas do usuario.
 
 .PARAMETER IconSource
     PNG de origem do icone. Padrao: assets\icon\icon-512.png.
@@ -90,63 +88,51 @@ $env:GOROOT = $best.root
 Good ("{0}  ({1})" -f $best.raw, $goExe)
 
 # --- 2. MPV payload --------------------------------------------------------
-if (-not $MpvSource) { $MpvSource = "$env:USERPROFILE\Documents\mpv" }
-if (Test-Path (Join-Path $MpvSource 'mpv.exe')) {
+if ($MpvSource) {
+    if (-not (Test-Path (Join-Path $MpvSource 'mpv.exe'))) {
+        Bad "mpv.exe nao encontrado em '$MpvSource'"
+        exit 1
+    }
     Step 'Preparando o payload do MPV'
     & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $root 'tools\prepare-mpv.ps1') -Source $MpvSource | Out-Null
     if ($LASTEXITCODE -ne 0) { Bad 'prepare-mpv falhou'; exit 1 }
     $n = (Get-ChildItem (Join-Path $root 'assets\mpv') -Recurse -File | Measure-Object -Property Length -Sum)
     Good ("assets/mpv  {0} arquivos, {1:N1} MB" -f $n.Count, ($n.Sum / 1MB))
 } else {
-    Ok "MPV de origem nao encontrado em '$MpvSource' - reaproveitando o payload ja preparado"
-    if (-not (Test-Path (Join-Path $root 'assets\mpv\mpv.exe'))) {
-        Bad 'Nenhum payload de MPV preparado. O build distribuiria um pacote quebrado.'
+    Ok 'Reaproveitando assets\mpv sem copiar arquivos locais'
+}
+if (-not (Test-Path (Join-Path $root 'assets\mpv\mpv.exe'))) {
+    if (-not $SkipInstaller) {
+        Bad 'O instalador requer assets\mpv\mpv.exe. Informe -MpvSource ou use -SkipInstaller.'
         exit 1
     }
+    Ok 'mpv.exe ausente; gerando somente Kouki.exe para teste/uso com MPV externo'
 }
 
 # --- 3. icone --------------------------------------------------------------
 if (-not $IconSource) { $IconSource = Join-Path $root 'assets\icon\icon-512.png' }
 if (Test-Path $IconSource) {
     Step 'Gerando o kouki.ico multi-resolucao'
-    & $goExe run ./tools/mkicon -in $IconSource -out (Join-Path $root 'kouki.ico') | Out-Null
+    & $goExe run -mod=readonly ./tools/mkicon -in $IconSource -out (Join-Path $root 'kouki.ico') | Out-Null
     if ($LASTEXITCODE -ne 0) { Bad 'mkicon falhou'; exit 1 }
     Good ("kouki.ico  {0:N0} bytes" -f (Get-Item (Join-Path $root 'kouki.ico')).Length)
 } else {
     Ok "PNG de origem nao encontrado em '$IconSource' - reaproveitando o kouki.ico existente"
+    if (-not (Test-Path (Join-Path $root 'kouki.ico'))) { Bad 'kouki.ico ausente'; exit 1 }
 }
 
 # --- 4. recursos (.syso) ---------------------------------------------------
 Step 'Gerando kouki_windows.syso (icone + versao + manifest)'
-$gvi = $null
-foreach ($cand in @("$env:USERPROFILE\go\bin\goversioninfo.exe", "$env:LOCALAPPDATA\Programs\Kouki\tools\goversioninfo.exe")) {
-    if (Test-Path $cand) { $gvi = $cand; break }
-}
-if (-not $gvi) {
-    Step 'Instalando goversioninfo (uma vez)'
-    & $goExe install github.com/josephspurrier/goversioninfo/cmd/goversioninfo@latest 2>&1 | Out-Null
-    $gvi = "$env:USERPROFILE\go\bin\goversioninfo.exe"
-}
-if (Test-Path $gvi) {
-    & $gvi -64 -o kouki_windows.syso -icon kouki.ico -application-icon kouki.ico `
-           -manifest kouki.exe.manifest -propagate-ver-strings versioninfo.json
-    if ($LASTEXITCODE -ne 0) { Bad 'goversioninfo falhou'; exit 1 }
-    Good ("kouki_windows.syso  {0:N0} bytes" -f (Get-Item (Join-Path $root 'kouki_windows.syso')).Length)
-} else {
-    Bad 'goversioninfo indisponivel - o exe ficaria sem icone nem metadados de versao.'
-    exit 1
-}
+& $goExe run github.com/josephspurrier/goversioninfo/cmd/goversioninfo@v1.7.0 `
+    -64 -o kouki_windows.syso -icon kouki.ico -application-icon kouki.ico `
+    -manifest kouki.exe.manifest -propagate-ver-strings versioninfo.json
+if ($LASTEXITCODE -ne 0) { Bad 'goversioninfo falhou'; exit 1 }
+Good ("kouki_windows.syso  {0:N0} bytes" -f (Get-Item (Join-Path $root 'kouki_windows.syso')).Length)
 
-# --- 5. modulos ------------------------------------------------------------
-Step 'Resolvendo modulos'
-& $goExe mod tidy 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { Bad 'go mod tidy falhou'; exit 1 }
-Good 'go.mod / go.sum atualizados'
-
-# --- 6. build --------------------------------------------------------------
+# --- 5. build --------------------------------------------------------------
 Step 'Compilando Kouki.exe'
 $sw = [Diagnostics.Stopwatch]::StartNew()
-& $goExe build -trimpath -ldflags='-H=windowsgui -s -w' -o Kouki.exe
+& $goExe build -mod=readonly -trimpath -ldflags='-H=windowsgui -s -w' -o Kouki.exe
 $sw.Stop()
 if ($LASTEXITCODE -ne 0) { Bad 'go build falhou'; exit 1 }
 Good ("Kouki.exe  {0:N1} MB em {1:N1}s" -f ((Get-Item .\Kouki.exe).Length/1MB), $sw.Elapsed.TotalSeconds)

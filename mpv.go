@@ -560,6 +560,7 @@ type mpvPlayer struct {
 	mu       sync.Mutex
 	cmd      *exec.Cmd
 	pipePath string
+	stopping bool
 }
 
 // IsRunning reports whether Kouki currently owns a live mpv process.
@@ -623,13 +624,6 @@ func (p *mpvPlayer) Launch(exe string, opt mpvLaunchOptions) error {
 	}
 	pipePath := `\\.\pipe\` + pipe
 
-	p.mu.Lock()
-	if p.cmd != nil {
-		p.mu.Unlock()
-		return errors.New("o player já está em execução")
-	}
-	p.mu.Unlock()
-
 	logFile := filepath.Join(ConfigDir(), "mpv.log")
 	_ = os.MkdirAll(ConfigDir(), 0o700)
 	rotateLogIfLarge(logFile, 2<<20)
@@ -668,13 +662,20 @@ func (p *mpvPlayer) Launch(exe string, opt mpvLaunchOptions) error {
 		logAppend("mpv: log indisponível: ", lerr.Error())
 	}
 
+	// Start and publish the process under one lock. Otherwise two UI actions can
+	// both pass an earlier p.cmd check and launch two players for the same pipe.
+	p.mu.Lock()
+	if p.cmd != nil || p.stopping {
+		p.mu.Unlock()
+		return errors.New("o player já está em execução")
+	}
 	if err := cmd.Start(); err != nil {
+		p.mu.Unlock()
 		logAppend("mpv: Start falhou: ", err.Error())
 		return err
 	}
 
 	pid := cmd.Process.Pid
-	p.mu.Lock()
 	p.cmd = cmd
 	p.pipePath = pipePath
 	p.mu.Unlock()
@@ -703,6 +704,7 @@ func (p *mpvPlayer) reap(cmd *exec.Cmd, pid int) {
 	p.mu.Lock()
 	if p.cmd == cmd {
 		p.cmd = nil
+		p.pipePath = ""
 	}
 	p.mu.Unlock()
 
@@ -745,21 +747,35 @@ func (p *mpvPlayer) Stop(pipePath string, grace time.Duration) {
 	if grace <= 0 {
 		grace = 3 * time.Second
 	}
+	p.mu.Lock()
+	cmd := p.cmd
+	if cmd == nil || cmd.Process == nil || p.stopping {
+		p.mu.Unlock()
+		return
+	}
+	// Only stop a process we started. A stale caller-provided pipe could now
+	// belong to an unrelated mpv instance.
+	if p.pipePath != "" {
+		pipePath = p.pipePath
+	}
+	p.stopping = true
+	p.mu.Unlock()
+	defer func() {
+		p.mu.Lock()
+		if p.cmd == cmd {
+			p.cmd = nil
+			p.pipePath = ""
+		}
+		p.stopping = false
+		p.mu.Unlock()
+	}()
 
 	// Ask nicely first so mpv can save its state and close its own window.
-	if pipePath != "" {
+	if pipePath != "" && processAlive(cmd.Process.Pid) {
 		if m, err := dialMpv(pipePath, 2*time.Second); err == nil {
 			_ = m.setCommand("quit")
 			_ = m.Close()
 		}
-	}
-
-	p.mu.Lock()
-	cmd := p.cmd
-	p.cmd = nil
-	p.mu.Unlock()
-	if cmd == nil || cmd.Process == nil {
-		return
 	}
 
 	// Wait for a clean exit, then take it down.

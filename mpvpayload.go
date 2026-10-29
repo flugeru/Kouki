@@ -2,7 +2,7 @@
 
 package main
 
-// mpvpayload.go — the MPV distribution that ships inside Kouki.exe.
+// mpvpayload.go — optional MPV payload support.
 //
 // Startup behaviour requested for Kouki:
 //
@@ -12,11 +12,11 @@ package main
 //     already configured;
 //  3. if one is found, only its mpv.conf needs fixing so the IPC channel opens.
 //
-// Because step 2 has to work from the running executable alone, the payload is
-// embedded rather than left only in the Inno Setup package. That costs the
-// executable ~127 MB; without it Kouki could not install anything by itself.
+// Source checkouts contain the configuration tree but may omit mpv.exe. Release
+// builds can embed the complete player after tools/prepare-mpv.ps1 is run.
 
 import (
+	"bytes"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -69,10 +69,9 @@ func mpvPayloadEntries() ([]string, error) {
 // InstallBundledMpv writes the embedded MPV into dir and guarantees its
 // mpv.conf exposes the IPC channel.
 //
-// It is deliberately merge-style rather than destructive: files already present
-// with the same size are skipped, so re-running after an update is cheap and
-// never leaves a half-written player. A locked mpv.exe (the player running) is
-// reported, not treated as fatal.
+// It is merge-style: byte-identical files are skipped, and changed files are
+// replaced through a temporary file so an interrupted write does not truncate
+// the installed player. A locked mpv.exe is reported as an error.
 func InstallBundledMpv(dir string) (int, error) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {
@@ -102,13 +101,16 @@ func InstallBundledMpv(dir string) (int, error) {
 			return written, err
 		}
 
-		// Skip identical files so an upgrade only rewrites what changed.
+		// Size alone cannot prove equality: a damaged or older file can have
+		// exactly the same length.
 		if info, err := os.Stat(target); err == nil && info.Size() == int64(len(data)) {
-			skipped++
-			continue
+			if existing, err := os.ReadFile(target); err == nil && bytes.Equal(existing, data) {
+				skipped++
+				continue
+			}
 		}
 
-		if err := os.WriteFile(target, data, 0o600); err != nil {
+		if err := replaceMpvFile(target, data); err != nil {
 			// A running mpv.exe cannot be overwritten; note it and carry on so the
 			// rest of the tree still lands.
 			if strings.HasSuffix(strings.ToLower(rel), ".exe") {
@@ -127,6 +129,22 @@ func InstallBundledMpv(dir string) (int, error) {
 
 	logAppend("mpv: payload ok — ", fmt.Sprint(written), " escritos, ", fmt.Sprint(skipped), " inalterados")
 	return written, nil
+}
+
+func replaceMpvFile(target string, data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(target), ".kouki-mpv-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), target)
 }
 
 // InstallAndConfigureMpv installs the bundled MPV into dir (when nothing is

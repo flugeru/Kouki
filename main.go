@@ -1128,8 +1128,12 @@ func rotateLogIfLarge(path string, limit int64) {
 }
 
 func logAppend(lines ...string) {
-	rotateLogIfLarge(logPath(), 1<<20)
-	f, err := os.OpenFile(logPath(), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+	path := logPath()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return
+	}
+	rotateLogIfLarge(path, 1<<20)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
 		return
 	}
@@ -1166,6 +1170,9 @@ var fileWriteMu sync.Mutex
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	fileWriteMu.Lock()
 	defer fileWriteMu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, data, perm); err != nil {
 		return err
@@ -1713,10 +1720,7 @@ func loadConfig() Config {
 	if v := strings.TrimSpace(os.Getenv("SUWAYOMI_DISCORD_APP_ID")); v != "" {
 		suwayomiAppID = v
 	}
-	pipe := os.Getenv("MPV_PIPE")
-	if pipe == "" {
-		pipe = `\\.\pipe\mpv-pipe`
-	}
+	pipe := mpvPipeName()
 	poll := 250 * time.Millisecond
 	if v := os.Getenv("POLL_MS"); v != "" {
 		if ms, err := strconv.Atoi(v); err == nil && ms >= 200 {
@@ -3434,12 +3438,12 @@ func refreshAuthMenu() {
 	isMALLoggingIn := malLoginCancelFunc != nil
 	malLoginCancelMu.Unlock()
 
-	if isLoggingIn || isMALLoggingIn {
-		return
-	}
-
 	if menuLogin != nil && menuLogout != nil {
-		if hasToken {
+		if isLoggingIn {
+			menuLogin.SetTitle("Cancelar login…")
+			menuLogin.Enable()
+			menuLogout.Disable()
+		} else if hasToken {
 			title := "AniList: conectado"
 			if username != "" {
 				title = "Conectado como @" + username
@@ -3474,7 +3478,11 @@ func refreshAuthMenu() {
 	}
 
 	if menuMALLogin != nil && menuMALLogout != nil {
-		if malHasToken {
+		if isMALLoggingIn {
+			menuMALLogin.SetTitle("Cancelar login…")
+			menuMALLogin.Enable()
+			menuMALLogout.Disable()
+		} else if malHasToken {
 			title := "MyAnimeList: conectado"
 			if malUsername != "" {
 				title = "MAL: conectado como " + malUsername
@@ -3538,6 +3546,7 @@ type authStore struct {
 	SimulAutoUPnP bool `json:"simul_auto_upnp"`
 	SimulJoinSync bool `json:"simul_join_sync"`
 	mu            sync.RWMutex
+	saveMu        sync.Mutex
 }
 
 // appDataDir is the per-user configuration directory: %APPDATA%\Kouki.
@@ -3545,9 +3554,7 @@ type authStore struct {
 // Legacy Kouki settings are migrated on first use (copy, never delete) so an
 // upgrade keeps the user's AniList/MAL tokens and preferences.
 func appDataDir() string {
-	base := ConfigDir()
-	_ = os.MkdirAll(base, 0700)
-	return base
+	return ConfigDir()
 }
 
 func (a *authStore) file() string { return filepath.Join(a.Path, "auth.json") }
@@ -3574,7 +3581,7 @@ func (a *authStore) Load() {
 		MALTracking       *bool  `json:"mal_tracking"`
 
 		DiscordRPC    *bool `json:"discord_rpc"`
-		WarnFiller    bool  `json:"warn_filler"`
+		WarnFiller    *bool `json:"warn_filler"`
 		RunOnStartup  bool  `json:"run_on_startup"`
 		SimulPort     int   `json:"simul_port"`
 		SimulAutoUPnP *bool `json:"simul_auto_upnp"`
@@ -3607,7 +3614,11 @@ func (a *authStore) Load() {
 		} else {
 			a.DiscordRPC = *tmp.DiscordRPC
 		}
-		a.WarnFiller = tmp.WarnFiller
+		if tmp.WarnFiller == nil {
+			a.WarnFiller = true
+		} else {
+			a.WarnFiller = *tmp.WarnFiller
+		}
 		a.RunOnStartup = tmp.RunOnStartup
 		if validateSimulPort(tmp.SimulPort) {
 			a.SimulPort = tmp.SimulPort
@@ -3624,6 +3635,8 @@ func (a *authStore) Load() {
 }
 
 func (a *authStore) Save() {
+	a.saveMu.Lock()
+	defer a.saveMu.Unlock()
 	a.mu.RLock()
 	data := struct {
 		AccessToken     string `json:"access_token"`
@@ -3717,7 +3730,6 @@ func (a *authStore) ClearMAL() {
 	a.MALTokenExpiresAt = 0
 	a.MALUsername = ""
 	a.MALUserID = 0
-	a.MALTracking = true
 	a.mu.Unlock()
 	a.Save()
 }
@@ -3728,6 +3740,7 @@ type overrideStore struct {
 	Path     string
 	FileName string
 	mu       sync.RWMutex
+	saveMu   sync.Mutex
 	ByK      map[string]int `json:"by_key"`
 }
 
@@ -3760,10 +3773,16 @@ func (o *overrideStore) Load() {
 }
 
 func (o *overrideStore) Save() {
+	o.saveMu.Lock()
+	defer o.saveMu.Unlock()
 	o.mu.RLock()
+	copyByKey := make(map[string]int, len(o.ByK))
+	for key, mediaID := range o.ByK {
+		copyByKey[key] = mediaID
+	}
 	data := struct {
 		ByK map[string]int `json:"by_key"`
-	}{ByK: o.ByK}
+	}{ByK: copyByKey}
 	o.mu.RUnlock()
 	b, _ := json.MarshalIndent(data, "", "  ")
 	if err := writeFileAtomic(o.file(), b, 0600); err != nil {
@@ -4888,6 +4907,10 @@ func refreshMALViewerFromToken(ctx context.Context, cfg Config) {
 	}
 
 	store.mu.Lock()
+	if strings.TrimSpace(store.MALAccessToken) != tok {
+		store.mu.Unlock()
+		return
+	}
 	changed := store.MALUsername != name || store.MALUserID != uid
 	store.MALUsername = name
 	store.MALUserID = uid
@@ -5028,6 +5051,10 @@ func refreshViewerFromToken(ctx context.Context) {
 	}
 
 	store.mu.Lock()
+	if strings.TrimSpace(store.AccessToken) != tok {
+		store.mu.Unlock()
+		return
+	}
 	changed := store.Username != name || store.UserID != uid
 	store.Username = name
 	store.UserID = uid
@@ -5120,31 +5147,15 @@ func onReadyTray(ctx context.Context, cancel context.CancelFunc) {
 		for {
 			select {
 			case <-menuLogin.ClickedCh:
-				loginCancelMu.Lock()
-				if loginCancelFunc != nil {
-					loginCancelFunc()
-					loginCancelFunc = nil
-					loginCancelMu.Unlock()
-
-					menuLogin.SetTitle("Entrar no AniList…")
-					menuLogin.Enable()
+				loginCtx, generation, canceled := startOrCancelAniLogin(ctx)
+				refreshAuthMenu()
+				if canceled {
 					continue
 				}
-				loginCancelMu.Unlock()
-
-				menuLogin.SetTitle("Cancelar login…")
-
-				loginCtx, loginCancel := context.WithCancel(ctx)
-				loginCancelMu.Lock()
-				loginCancelFunc = loginCancel
-				loginCancelMu.Unlock()
 
 				go func() {
 					err := oauthLogin(loginCtx)
-
-					loginCancelMu.Lock()
-					loginCancelFunc = nil
-					loginCancelMu.Unlock()
+					finishAniLogin(generation)
 
 					if err != nil {
 						if err == context.Canceled {
@@ -5183,37 +5194,21 @@ func onReadyTray(ctx context.Context, cancel context.CancelFunc) {
 				}
 
 			case <-menuMALLogin.ClickedCh:
-				malLoginCancelMu.Lock()
-				if malLoginCancelFunc != nil {
-					malLoginCancelFunc()
-					malLoginCancelFunc = nil
-					malLoginCancelMu.Unlock()
-
-					menuMALLogin.SetTitle("Entrar no MyAnimeList…")
-					menuMALLogin.Enable()
-					continue
-				}
-				malLoginCancelMu.Unlock()
-
 				cfg2 := loadConfig()
 				if strings.TrimSpace(cfg2.MALClientID) == "" || strings.TrimSpace(cfg2.MALClientSecret) == "" {
 					messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 					continue
 				}
 
-				menuMALLogin.SetTitle("Cancelar login…")
-
-				loginCtx, loginCancel := context.WithCancel(ctx)
-				malLoginCancelMu.Lock()
-				malLoginCancelFunc = loginCancel
-				malLoginCancelMu.Unlock()
+				loginCtx, generation, canceled := startOrCancelMALLogin(ctx)
+				refreshAuthMenu()
+				if canceled {
+					continue
+				}
 
 				go func() {
 					err := malOAuthLogin(loginCtx, cfg2)
-
-					malLoginCancelMu.Lock()
-					malLoginCancelFunc = nil
-					malLoginCancelMu.Unlock()
+					finishMALLogin(generation)
 
 					if err != nil {
 						if err == context.Canceled {
@@ -5412,7 +5407,6 @@ func runWithTray(mainfn func(context.Context), onExit func()) {
 
 var (
 	user32          = syscall.NewLazyDLL("user32.dll")
-	kernel32        = syscall.NewLazyDLL("kernel32.dll")
 	procMessageBoxW = user32.NewProc("MessageBoxW")
 )
 
@@ -5439,13 +5433,6 @@ func messageBox(title, text string, style uint32) int {
 	t, _ := syscall.UTF16PtrFromString(text)
 	c, _ := syscall.UTF16PtrFromString(title)
 
-	// If this is the MPV install notification, swap the system info icon for
-	// the MPV icon via a CBT hook. The hook fires before the MessageBox window
-	// becomes visible, so the user never sees the default icon.
-	if style&mbIconInfo != 0 && mpvIconHook.mpvIcoPath != "" {
-		mpvIconHook.install()
-	}
-
 	r, _, _ := procMessageBoxW.Call(
 		0,
 		uintptr(unsafe.Pointer(t)),
@@ -5453,99 +5440,17 @@ func messageBox(title, text string, style uint32) int {
 		uintptr(style),
 	)
 
-	if style&mbIconInfo != 0 && mpvIconHook.mpvIcoPath != "" {
-		mpvIconHook.remove()
-	}
-
 	return int(r)
 }
 
-// mpvIconHook replaces the MessageBox system icon with the MPV icon.
-//
-// MessageBoxW creates its dialog on the caller's thread and enters a modal
-// loop, so a CBT hook on this thread intercepts the dialog window creation
-// before the first paint. The hook loads the MPV .ico and sends WM_SETICON
-// for both the big (title bar) and small (taskbar) slots.
-type mpvIconHookT struct {
-	hook       uintptr
-	mpvIcoPath string
-}
-
-var mpvIconHook = mpvIconHookT{mpvIcoPath: `C:\Users\Flugel\Downloads\mpv-icon.ico`}
-
-var (
-	procSetWindowsHookEx  = user32.NewProc("SetWindowsHookExW")
-	procCallNextHookEx    = user32.NewProc("CallNextHookEx")
-	procUnhookWindowsHook = user32.NewProc("UnhookWindowsHookEx")
-	procSendMessageW      = user32.NewProc("SendMessageW")
-	procLoadImageW        = user32.NewProc("LoadImageW")
-	procGetCurrentThread  = kernel32.NewProc("GetCurrentThreadId")
-)
-
-const (
-	whCbt          = 5
-	hcbtCreateWnd  = 3
-	wmSetIcon      = 0x0080
-	imageIcon      = 1
-	lrLoadFromFile = 0x0010
-	iconBig        = 0
-	iconSmall      = 1
-)
-
-func (h *mpvIconHookT) install() {
-	if h.hook != 0 {
+// main starts the installed application. The Inno Setup package handles
+// installation; a standalone Kouki.exe can run with an existing MPV.
+func main() {
+	if len(os.Args) == 2 && (strings.EqualFold(os.Args[1], "--version") || strings.EqualFold(os.Args[1], "-version")) {
+		fmt.Printf("%s %s (%s/%s)\n", appName, appVersion, runtime.GOOS, runtime.GOARCH)
 		return
 	}
-	tidPtr, _, _ := procGetCurrentThread.Call()
-	tid := uint32(tidPtr)
 
-	cb := syscall.NewCallback(func(nCode int32, wParam, lParam uintptr) uintptr {
-		if nCode == hcbtCreateWnd {
-			if ico := loadMPVIcon(); ico != 0 {
-				procSendMessageW.Call(wParam, wmSetIcon, iconBig, ico)
-				procSendMessageW.Call(wParam, wmSetIcon, iconSmall, ico)
-			}
-		}
-		nextPtr, _, _ := procCallNextHookEx.Call(0, uintptr(nCode), wParam, lParam)
-		return nextPtr
-	})
-
-	hookPtr, _, _ := procSetWindowsHookEx.Call(
-		uintptr(whCbt),
-		cb,
-		0,
-		uintptr(tid),
-	)
-	h.hook = hookPtr
-}
-
-func (h *mpvIconHookT) remove() {
-	if h.hook != 0 {
-		procUnhookWindowsHook.Call(h.hook)
-		h.hook = 0
-	}
-}
-
-// loadMPVIcon loads the first icon from the MPV .ico file.
-// Returns 0 if the file is missing or cannot be loaded.
-func loadMPVIcon() uintptr {
-	if mpvIconHook.mpvIcoPath == "" {
-		return 0
-	}
-	p, _ := syscall.UTF16PtrFromString(mpvIconHook.mpvIcoPath)
-	ret, _, _ := procLoadImageW.Call(0, uintptr(unsafe.Pointer(p)), imageIcon, 0, 0, lrLoadFromFile)
-	return ret
-}
-
-// main is the entry point for BOTH the bootstrapper and the installed
-// application. The same binary acts as installer until it has been installed.
-//
-// Decision table (see install.go):
-//
-//	valid install + we ARE the installed copy  -> run the tray app
-//	valid install + we are a stray bootstrapper -> hand off, then exit
-//	no valid install                            -> run the installer, never the tray
-func main() {
 	release, err := acquireSingleInstanceGuard()
 	if err != nil {
 		// Another copy already owns the tray icon and the main window; exit quietly
@@ -6004,7 +5909,8 @@ func run(ctx context.Context, cfg Config) {
 		}
 		// sharedMpvConn publishes the live connection so the GUI can read
 		// playback state without opening a second pipe.
-		conn, err := dialMpv(cfg.MpvPipe, 2*time.Second)
+		pipe := mpvPipeName()
+		conn, err := dialMpv(pipe, 2*time.Second)
 		if err != nil {
 			sharedMpvConn.setErr(err)
 			sharedMpvConn.set(nil)
@@ -6016,7 +5922,7 @@ func run(ctx context.Context, cfg Config) {
 			time.Sleep(600 * time.Millisecond)
 			continue
 		}
-		logAppend("mpv: canal IPC ativo em ", cfg.MpvPipe)
+		logAppend("mpv: canal IPC ativo em ", pipe)
 		sharedMpvConn.set(conn)
 
 		runLoop(ctx, cfg, conn, mgr)
@@ -6165,7 +6071,12 @@ func runLoop(ctx context.Context, cfg Config, conn *mpvConn, mgr *discordManager
 		traySetWatching(aname, ep, percent, totalEps)
 	}
 
+	// Broadcasts and remote progress updates have different success states.
+	// A temporary API failure must not suppress progress for the rest of a file.
 	reported := make(map[string]bool)
+	aniSynced := make(map[string]bool)
+	malSynced := make(map[string]bool)
+	nextSyncAttempt := make(map[string]time.Time)
 
 	for {
 		select {
@@ -6414,6 +6325,9 @@ func runLoop(ctx context.Context, cfg Config, conn *mpvConn, mgr *discordManager
 
 				traySetWatching(aname, ep, -1, totalEps)
 				reported = make(map[string]bool)
+				aniSynced = make(map[string]bool)
+				malSynced = make(map[string]bool)
+				nextSyncAttempt = make(map[string]time.Time)
 
 				if storeToggle("fillerWarn") && aid > 0 && strings.TrimSpace(ep) != "" {
 					if epNum, err := strconv.Atoi(ep); err == nil && epNum > 0 {
@@ -6458,36 +6372,47 @@ func runLoop(ctx context.Context, cfg Config, conn *mpvConn, mgr *discordManager
 					epStr := cache.lastEp
 					totalEps := cache.lastTotalEps
 					cache.mu.Unlock()
-					if aid > 0 && epStr != "" {
+					if epStr != "" {
 						if epNum, err := strconv.Atoi(epStr); err == nil && epNum > 0 {
-							k := fmt.Sprintf("%d:%d", aid, epNum)
-							if !reported[k] {
-								reported[k] = true
-								simulBroadcastSync(simulSyncEvent{AniID: aid, Episode: epNum, TotalEps: totalEps, AtUnixSec: time.Now().Unix()})
+							if aid > 0 {
+								k := fmt.Sprintf("%d:%d", aid, epNum)
+								if !reported[k] {
+									reported[k] = true
+									simulBroadcastSync(simulSyncEvent{AniID: aid, Episode: epNum, TotalEps: totalEps, AtUnixSec: time.Now().Unix()})
+								}
 
+								if anilistTrackingEnabled() && !aniSynced[k] && !time.Now().Before(nextSyncAttempt["ani:"+k]) {
 								store.mu.RLock()
 								tok := store.AccessToken
 								uid := store.UserID
 								store.mu.RUnlock()
-								if anilistTrackingEnabled() && strings.TrimSpace(tok) != "" && uid > 0 {
-									c, cancel := context.WithTimeout(ctx, 8*time.Second)
-									err := syncAniListProgress(c, tok, uid, aid, epNum, totalEps)
-									cancel()
-									if err != nil {
-										logAppend("AniList sync error: ", err.Error())
-									}
+								c, cancel := context.WithTimeout(ctx, 8*time.Second)
+								err := syncAniListProgress(c, tok, uid, aid, epNum, totalEps)
+								cancel()
+								if err != nil {
+									logAppend("AniList sync error: ", err.Error())
+									nextSyncAttempt["ani:"+k] = time.Now().Add(time.Minute)
+								} else {
+									aniSynced[k] = true
 								}
+							}
+							}
 
-								curTrack.mu.RLock()
-								malID := curTrack.LastMALAnimeID
-								malTotal := curTrack.LastMALTotalEps
-								curTrack.mu.RUnlock()
-								if malTrackingEnabled() && malID > 0 {
+							curTrack.mu.RLock()
+							malID := curTrack.LastMALAnimeID
+							malTotal := curTrack.LastMALTotalEps
+							curTrack.mu.RUnlock()
+							if malTrackingEnabled() && malID > 0 {
+								k := fmt.Sprintf("%d:%d", malID, epNum)
+								if !malSynced[k] && !time.Now().Before(nextSyncAttempt["mal:"+k]) {
 									c, cancel := context.WithTimeout(ctx, 8*time.Second)
 									err := syncMALProgress(c, cfg, malID, epNum, malTotal)
 									cancel()
 									if err != nil {
 										logAppend("MAL sync error: ", err.Error())
+										nextSyncAttempt["mal:"+k] = time.Now().Add(time.Minute)
+									} else {
+										malSynced[k] = true
 									}
 								}
 							}
