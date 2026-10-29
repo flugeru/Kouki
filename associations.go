@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // associations.go - Windows integration that goes beyond what the Inno Setup

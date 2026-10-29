@@ -8,7 +8,7 @@
       1. localizar um toolchain Go consistente
       2. preparar o payload do MPV a partir da pasta do usuario (opcional)
       3. regenerar kouki.ico a partir do PNG de origem
-      4. regenerar kouki.syso (icone + versao + manifest) via goversioninfo
+      4. regenerar kouki_windows.syso (icone + versao + manifest) via goversioninfo
       5. resolver modulos
       6. go build -> Kouki.exe
       7. compilar o instalador com ISCC (installer\kouki.iss)
@@ -117,7 +117,7 @@ if (Test-Path $IconSource) {
 }
 
 # --- 4. recursos (.syso) ---------------------------------------------------
-Step 'Gerando kouki.syso (icone + versao + manifest)'
+Step 'Gerando kouki_windows.syso (icone + versao + manifest)'
 $gvi = $null
 foreach ($cand in @("$env:USERPROFILE\go\bin\goversioninfo.exe", "$env:LOCALAPPDATA\Programs\Kouki\tools\goversioninfo.exe")) {
     if (Test-Path $cand) { $gvi = $cand; break }
@@ -128,10 +128,10 @@ if (-not $gvi) {
     $gvi = "$env:USERPROFILE\go\bin\goversioninfo.exe"
 }
 if (Test-Path $gvi) {
-    & $gvi -64 -o kouki.syso -icon kouki.ico -application-icon kouki.ico `
+    & $gvi -64 -o kouki_windows.syso -icon kouki.ico -application-icon kouki.ico `
            -manifest kouki.exe.manifest -propagate-ver-strings versioninfo.json
     if ($LASTEXITCODE -ne 0) { Bad 'goversioninfo falhou'; exit 1 }
-    Good ("kouki.syso  {0:N0} bytes" -f (Get-Item (Join-Path $root 'kouki.syso')).Length)
+    Good ("kouki_windows.syso  {0:N0} bytes" -f (Get-Item (Join-Path $root 'kouki_windows.syso')).Length)
 } else {
     Bad 'goversioninfo indisponivel - o exe ficaria sem icone nem metadados de versao.'
     exit 1

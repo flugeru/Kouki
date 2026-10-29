@@ -1,6 +1,6 @@
 # Kouki
 
-**Contas, reprodução e progresso** — mostra o que está tocando com o título, o episódio, a capa e o progresso, e sincroniza com AniList e MyAnimeList. Tudo em português, instalado só para o seu usuário, sem pedir administrador.
+**Contas, reprodução e progresso** — mostra o que está tocando com o título, o episódio, a capa e o progresso, e sincroniza com AniList e MyAnimeList. Tudo em português. Esta branch inclui Windows e Linux (AppImage).
 
 > Fork do [Koushin](https://github.com/hyuzipt/Koushin). As configurações antigas do Koushin são migradas automaticamente para `%APPDATA%\Kouki` na primeira execução.
 
@@ -24,7 +24,11 @@ Repositório: <https://github.com/flugeru/Kouki>
 
 ---
 
-## Instalação
+## Linux (AppImage)
+
+O [fluxo Linux AppImage](https://github.com/flugeru/Kouki/actions/workflows/linux-appimage.yml) gera versões para x86_64 e ARM64. O Kouki usa o `mpv` instalado no Linux, controlado por socket Unix, e abre a interface local no navegador padrão. Consulte o [guia de instalação e compilação para Linux](README-Linux.md) para dependências e instruções.
+
+## Windows (instalador)
 
 Execute **`Kouki-1.0.2-Setup.exe`**.
 
@@ -93,7 +97,7 @@ O MPV empacotado é o build do usuário (shinchiro) e **não** traz `libmpv-2.dl
 
 ---
 
-## Compilando
+## Compilando no Windows
 
 Requisitos: **Go 1.26+** e **Inno Setup 6**.
 

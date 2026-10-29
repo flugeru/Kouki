@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // mpv.go — integration with the bundled mpv player.

@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // ui.go — the Kouki main window.

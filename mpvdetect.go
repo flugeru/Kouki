@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // mpvdetect.go — locating an mpv installation.

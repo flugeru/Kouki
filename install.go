@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // install.go — installation layout, configuration locations and the small

@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // theme.go — dark appearance for the two surfaces Kouki owns: the local web

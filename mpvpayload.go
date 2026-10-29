@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // mpvpayload.go — the MPV distribution that ships inside Kouki.exe.

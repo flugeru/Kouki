@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="kouki-token" content="__KOUKI_TOKEN__">
+  <title>Kouki — Contas, reprodução e progresso</title>
+  <link rel="icon" type="image/png" href="/icon.png">
+  <link rel="stylesheet" href="/app.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><img src="/icon.png" alt=""></div>
+        <div>
+          <div class="brand-name">Kouki <span id="version"></span></div>
+          <p class="brand-subtitle">Contas, reprodução e progresso</p>
+        </div>
+      </div>
+      <div id="status" class="status muted" role="status"><span class="status-dot"></span><span id="status-text">Conectando…</span></div>
+    </header>
+
+    <main class="dashboard">
+      <section class="card playback" aria-labelledby="playback-title">
+        <div class="section-head">
+          <div class="section-icon">▶</div>
+          <div><h1 id="playback-title">Reprodução</h1><p>Player MPV e acompanhamento em tempo real</p></div>
+          <span class="eyebrow">PLAYER</span>
+        </div>
+        <div class="now-playing">
+          <div class="now-symbol">♫</div>
+          <div class="now-copy"><div class="micro-label">TOCANDO AGORA</div><strong id="playing-title">Nenhum player conectado</strong></div>
+          <span id="position" class="position"></span>
+        </div>
+        <div class="progress-track" aria-label="Progresso da reprodução"><div id="progress-fill" class="progress-fill"></div></div>
+        <div class="button-row main-controls">
+          <button class="button primary" data-action="mpv-launch">Iniciar MPV</button>
+          <button class="button" data-action="mpv-toggle-pause">Pausar / Retomar</button>
+          <button class="button danger" data-action="mpv-stop">Encerrar MPV</button>
+        </div>
+        <div class="button-row extra-controls">
+          <button class="button compact" data-action="mpv-previous" title="Faixa anterior">⏮ Anterior</button>
+          <button class="button compact" data-action="mpv-next" title="Próxima faixa">Próximo ⏭</button>
+          <button class="button compact" data-action="mpv-fullscreen">⛶ Tela cheia</button>
+          <button class="button compact" data-action="mpv-volume-down">− Volume</button>
+          <button class="button compact" data-action="mpv-volume-up">+ Volume</button>
+        </div>
+        <div class="path-line"><span class="path-icon">⌁</span><span id="mpv-path">Procurando MPV…</span></div>
+        <div class="button-row utilities">
+          <button class="button compact" data-action="mpv-detect">Procurar MPV</button>
+          <button class="button compact" data-action="open-mpv-folder">Pasta do MPV</button>
+        </div>
+      </section>
+
+      <div class="two-column">
+        <section class="card" aria-labelledby="anilist-title">
+          <div class="section-head"><div class="section-icon">◎</div><div><h2 id="anilist-title">AniList</h2><p>Conta e progresso</p></div></div>
+          <div class="account-line"><span class="account-dot"></span><span id="anilist-account">Nenhuma conta conectada</span></div>
+          <div class="button-row account-buttons">
+            <button class="button primary" data-action="ani-login" id="ani-login">Entrar</button>
+            <button class="button" data-action="ani-logout">Sair</button>
+            <button class="button" data-action="ani-correct" data-correct>Selecionar anime</button>
+          </div>
+          <div class="toggle-list">
+            <label class="toggle-row"><input type="checkbox" data-toggle="aniListTrack"><span class="switch"></span><span>Atualizar progresso</span></label>
+            <label class="toggle-row"><input type="checkbox" data-toggle="fillerWarn"><span class="switch"></span><span>Avisar sobre episódios filler</span></label>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="mal-title">
+          <div class="section-head"><div class="section-icon">◎</div><div><h2 id="mal-title">MyAnimeList</h2><p>Conta e progresso</p></div></div>
+          <div class="account-line"><span class="account-dot"></span><span id="mal-account">Nenhuma conta conectada</span></div>
+          <div class="button-row account-buttons">
+            <button class="button primary" data-action="mal-login" id="mal-login">Entrar</button>
+            <button class="button" data-action="mal-logout">Sair</button>
+            <button class="button" data-action="mal-correct" data-correct>Selecionar anime</button>
+          </div>
+          <div class="toggle-list">
+            <label class="toggle-row"><input type="checkbox" data-toggle="malTrack"><span class="switch"></span><span>Atualizar progresso</span></label>
+          </div>
+        </section>
+      </div>
+
+      <div class="two-column">
+        <section class="card" aria-labelledby="simul-title">
+          <div class="section-head"><div class="section-icon">⌁</div><div><h2 id="simul-title">Simulwatching</h2><p>Assistam juntos, em sincronia</p></div></div>
+          <div class="session-line"><span class="session-label">SESSÃO</span><strong id="simul-status">Desligado</strong><span id="simul-participants"></span></div>
+          <div class="button-row">
+            <button class="button primary" id="host-button">Hospedar</button>
+            <button class="button" id="join-button">Entrar</button>
+            <button class="button" data-action="simul-stop">Parar</button>
+          </div>
+          <div class="toggle-list"><label class="toggle-row"><input type="checkbox" data-toggle="simulJoinSync"><span class="switch"></span><span>Sincronizar meu AniList</span></label></div>
+        </section>
+
+        <section class="card" aria-labelledby="general-title">
+          <div class="section-head"><div class="section-icon">⚙</div><div><h2 id="general-title">Geral</h2><p>Inicialização e arquivos</p></div></div>
+          <div class="toggle-list"><label class="toggle-row"><input type="checkbox" data-toggle="runOnStartup"><span class="switch"></span><span>Executar ao iniciar o Linux</span></label></div>
+          <div class="button-row general-buttons"><button class="button compact" data-action="open-install-folder">Pasta do app</button><button class="button compact" data-action="open-config-folder">Pasta de dados</button></div>
+          <div class="button-row"><button class="button compact" data-action="about">Sobre o Kouki</button><button class="button compact danger" data-action="quit">Sair</button></div>
+        </section>
+      </div>
+    </main>
+    <footer>MPV do sistema • Linux AppImage <span>Interface local do Kouki</span></footer>
+  </div>
+  <div id="toast-region" aria-live="polite" aria-atomic="true"></div>
+  <dialog id="simul-dialog" aria-labelledby="simul-dialog-title">
+    <form method="dialog" id="simul-form">
+      <div class="dialog-head"><h2 id="simul-dialog-title">Simulwatching</h2><button type="button" id="close-dialog" class="dialog-close" aria-label="Fechar">×</button></div>
+      <p id="simul-dialog-subtitle"></p>
+      <label id="host-field" class="field">Endereço do anfitrião<input id="simul-host" autocomplete="off" placeholder="exemplo.com:45130"></label>
+      <label class="field">Código da sala<input id="simul-code" autocomplete="off" required minlength="3" maxlength="18" pattern="[A-Za-z0-9]+"></label>
+      <div class="dialog-actions"><button type="button" id="cancel-dialog" class="button">Cancelar</button><button type="submit" class="button primary">Confirmar</button></div>
+    </form>
+  </dialog>
+</body>
+</html>
