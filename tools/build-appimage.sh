@@ -14,7 +14,11 @@ case "$(uname -m)" in
   *) echo "Arquitetura Linux ainda não suportada: $(uname -m)" >&2; exit 1 ;;
 esac
 
-version="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null || printf 'dev')}"
+version="${VERSION:-$(awk -F '"' '/appVersion[[:space:]]*=/{print $2; exit}' install_linux.go)}"
+if [[ -z "$version" ]]; then
+  echo "Não foi possível ler appVersion de install_linux.go; defina VERSION." >&2
+  exit 1
+fi
 version="${version#v}"
 version="${version//[^[:alnum:]._-]/-}"
 output_dir="${OUTPUT_DIR:-$repo_root/dist}"
