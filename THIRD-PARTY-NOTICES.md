@@ -1,4 +1,4 @@
-# Third-Party Notices - Kouki 1.0.2
+# Third-Party Notices - Kouki 1.1.0
 
 Kouki redistributes the following third-party software. Kouki itself is released
 under the MIT license; the components below remain under their own licenses.

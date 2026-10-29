@@ -1,0 +1,71 @@
+name: Linux AppImage
+
+on:
+  push:
+    branches: [feature/linux-appimage]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  appimage:
+    name: AppImage (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x86_64
+          - runner: ubuntu-22.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Instalar dependências de compilação
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc pkg-config libgtk-3-dev libayatana-appindicator3-dev desktop-file-utils
+
+      - name: Testar código Go
+        run: go test ./...
+
+      - name: Verificar script de empacotamento
+        run: bash -n tools/build-appimage.sh
+
+      - name: Criar AppImage
+        run: bash tools/build-appimage.sh
+
+      - name: Verificar artefato e conteúdo
+        run: |
+          set -euo pipefail
+          image="$(find dist -maxdepth 1 -name "Kouki-*-${{ matrix.arch }}.AppImage" -print -quit)"
+          test -n "$image"
+          test -x "$image"
+          "$image" --appimage-extract >/dev/null
+          test -x squashfs-root/AppRun
+          test -x squashfs-root/usr/bin/kouki
+          test "$(squashfs-root/usr/bin/kouki --version)" = "Kouki 1.1.0 (linux/$(go env GOARCH))"
+          test -f squashfs-root/kouki.desktop
+          test -f squashfs-root/kouki.png
+          desktop-file-validate squashfs-root/kouki.desktop
+          if ldd squashfs-root/usr/bin/kouki | grep -q 'not found'; then
+            ldd squashfs-root/usr/bin/kouki
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Kouki-1.1.0-Linux-${{ matrix.arch }}
+          path: dist/Kouki-*-${{ matrix.arch }}.AppImage
+          if-no-files-found: error
