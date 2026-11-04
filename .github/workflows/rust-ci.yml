@@ -1,0 +1,47 @@
+name: Rust desktop
+
+on:
+  push:
+    branches: [rewrite/rust-multiplatform]
+  pull_request:
+    paths: ['src/**', 'Cargo.toml', 'Cargo.lock', '.github/workflows/rust-ci.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libwayland-dev libegl1-mesa-dev
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      - run: cargo build --locked --release
+      - name: Windows smoke test
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = & .\target\release\kouki.exe --version
+          if ($LASTEXITCODE -ne 0) { throw 'Kouki smoke test failed' }
+      - name: Linux smoke test
+        if: runner.os == 'Linux'
+        run: ./target/release/kouki --version
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Kouki-Rust-${{ runner.os }}
+          path: |
+            target/release/kouki
+            target/release/kouki.exe
+          if-no-files-found: error

@@ -1,5 +1,8 @@
 # Kouki
 
+> **Reescrita Rust nesta branch:** veja [README-Rust.md](README-Rust.md).
+> Windows e Linux primeiro; Android depois. Código Go abaixo permanece como referência durante migração.
+
 **Contas, reprodução e progresso** — mostra o que está tocando com o título, o episódio, a capa e o progresso, e sincroniza com AniList e MyAnimeList. Tudo em português. Esta branch inclui Windows e Linux (AppImage).
 
 > Fork do [Koushin](https://github.com/hyuzipt/Koushin). As configurações antigas do Koushin são migradas automaticamente para `%APPDATA%\Kouki` na primeira execução.
