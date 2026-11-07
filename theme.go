@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // theme.go — dark appearance for the two surfaces Kouki owns: the local web
@@ -21,6 +23,7 @@ package main
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"unsafe"
 
 	"github.com/lxn/walk"
@@ -78,8 +81,14 @@ func (w *darkWriter) WriteHeader(code int) {
 	}
 }
 
-// Write buffers the response instead of forwarding it.
-func (w *darkWriter) Write(p []byte) (int, error) { return w.buf.Write(p) }
+// Write buffers the response instead of forwarding it, retaining net/http's
+// implicit 200 status if a handler writes before calling WriteHeader.
+func (w *darkWriter) Write(p []byte) (int, error) {
+	if w.code == 0 {
+		w.code = http.StatusOK
+	}
+	return w.buf.Write(p)
+}
 
 // Flush satisfies http.Flusher, which net/http type-asserts for. There is
 // nothing to flush while buffering.
@@ -87,13 +96,24 @@ func (w *darkWriter) Flush() {}
 
 func (w *darkWriter) finish() {
 	body := w.buf.Bytes()
-	if i := bytes.Index(body, []byte("</head>")); i >= 0 {
-		style := []byte("<style>" + localPageCSS + "</style>")
-		merged := make([]byte, 0, len(body)+len(style))
-		merged = append(merged, body[:i]...)
-		merged = append(merged, style...)
-		merged = append(merged, body[i:]...)
-		body = merged
+	contentType := w.ResponseWriter.Header().Get("Content-Type")
+	if contentType == "" {
+		contentType = http.DetectContentType(body)
+	}
+	if strings.HasPrefix(strings.ToLower(contentType), "text/html") {
+		// HTML tag names are case-insensitive. Only rewrite HTML: JSON API
+		// responses may legitimately contain the text "</head>" in a value.
+		if i := bytes.Index(bytes.ToLower(body), []byte("</head>")); i >= 0 {
+			style := []byte("<style>" + localPageCSS + "</style>")
+			merged := make([]byte, 0, len(body)+len(style))
+			merged = append(merged, body[:i]...)
+			merged = append(merged, style...)
+			merged = append(merged, body[i:]...)
+			body = merged
+			// A length set by the original handler describes the unmodified
+			// body. Let net/http compute the new length after injection.
+			w.ResponseWriter.Header().Del("Content-Length")
+		}
 	}
 	code := w.code
 	if code == 0 {

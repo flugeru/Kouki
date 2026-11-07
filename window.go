@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // window.go — the native main window.
@@ -116,14 +118,69 @@ func foundMpv() []mpvCandidate {
 	return guiFoundMpv
 }
 
-// Login attempts in flight. A second click on "Entrar" cancels the running
-// attempt (which frees the callback port) instead of starting a rival listener
-// on the same port.
-var (
-	aniLoginMu     sync.Mutex
-	aniLoginCancel context.CancelFunc
-	aniLoginGen    int
-)
+// Each OAuth provider has one callback server shared by the window and tray.
+// A generation prevents an older, canceled attempt from clearing the cancel
+// function of a newer attempt.
+var aniLoginGeneration uint64
+
+func startOrCancelAniLogin(parent context.Context) (context.Context, uint64, bool) {
+	loginCancelMu.Lock()
+	defer loginCancelMu.Unlock()
+
+	if loginCancelFunc != nil {
+		// Keep the slot occupied until oauthLogin returns and shuts its
+		// callback server down. Starting again sooner can race that port.
+		loginCancelFunc()
+		return nil, aniLoginGeneration, true
+	}
+
+	aniLoginGeneration++
+	ctx, cancel := context.WithCancel(parent)
+	loginCancelFunc = cancel
+	return ctx, aniLoginGeneration, false
+}
+
+func finishAniLogin(generation uint64) bool {
+	loginCancelMu.Lock()
+	defer loginCancelMu.Unlock()
+	if generation != aniLoginGeneration {
+		return false
+	}
+	loginCancelFunc = nil
+	return true
+}
+
+// The window and tray both start MAL login. Keep the entire transition under
+// one lock so two quick clicks cannot each start a callback server. A canceled
+// attempt may finish after a new one starts, so only its own generation may
+// clear the cancel function.
+var malLoginGeneration uint64
+
+func startOrCancelMALLogin(parent context.Context) (context.Context, uint64, bool) {
+	malLoginCancelMu.Lock()
+	defer malLoginCancelMu.Unlock()
+
+	if malLoginCancelFunc != nil {
+		// Wait for the old callback server to close before a new one starts.
+		malLoginCancelFunc()
+		return nil, malLoginGeneration, true
+	}
+
+	malLoginGeneration++
+	ctx, cancel := context.WithCancel(parent)
+	malLoginCancelFunc = cancel
+	return ctx, malLoginGeneration, false
+}
+
+func finishMALLogin(generation uint64) bool {
+	malLoginCancelMu.Lock()
+	defer malLoginCancelMu.Unlock()
+	if generation != malLoginGeneration {
+		return false
+	}
+	malLoginCancelFunc = nil
+	return true
+}
 
 // user32 entry points for bringing the window back. walk's Show() only shows
 // the window: it neither restores one that was minimised nor takes the focus.
@@ -356,6 +413,10 @@ func runMainWindow() {
 
 	mw.Run()
 	close(stop)
+	gui.mu.Lock()
+	gui.w = nil
+	gui.mu.Unlock()
+	guiCanvas = nil
 }
 
 // waitForQuit blocks until Kouki is asked to quit, for when no window exists.
@@ -365,6 +426,9 @@ func waitForQuit() {
 
 // showMainWindow brings the window back from the tray.
 func showMainWindow() {
+	if guiIsQuitting.Load() {
+		return
+	}
 	gui.mu.Lock()
 	mw := gui.w
 	gui.mu.Unlock()
@@ -387,6 +451,9 @@ func showMainWindow() {
 
 // hideMainWindow sends the window back to the tray. Bound to Esc.
 func hideMainWindow() {
+	if guiIsQuitting.Load() {
+		return
+	}
 	gui.mu.Lock()
 	mw := gui.w
 	gui.mu.Unlock()
@@ -439,13 +506,20 @@ func refreshGui() {
 
 // refreshGuiSafe is refreshGui for background goroutines.
 func refreshGuiSafe() {
+	if guiIsQuitting.Load() {
+		return
+	}
 	gui.mu.Lock()
 	mw := gui.w
 	gui.mu.Unlock()
-	if mw == nil || guiCanvas == nil {
+	if mw == nil {
 		return
 	}
-	mw.Synchronize(refreshGui)
+	mw.Synchronize(func() {
+		if !guiIsQuitting.Load() {
+			refreshGui()
+		}
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -457,27 +531,15 @@ func guiAction(name string) {
 	cfg := loadConfig()
 	switch name {
 	case "ani-login":
-		aniLoginMu.Lock()
-		if aniLoginCancel != nil {
-			aniLoginCancel()
-			aniLoginCancel = nil
-			aniLoginMu.Unlock()
+		loginCtx, gen, canceled := startOrCancelAniLogin(context.Background())
+		refreshAuthMenu()
+		if canceled {
 			return
 		}
-		aniLoginGen++
-		gen := aniLoginGen
-		loginCtx, loginCancel := context.WithCancel(context.Background())
-		aniLoginCancel = loginCancel
-		aniLoginMu.Unlock()
 
 		go func() {
 			err := oauthLogin(loginCtx)
-
-			aniLoginMu.Lock()
-			if aniLoginGen == gen {
-				aniLoginCancel = nil
-			}
-			aniLoginMu.Unlock()
+			finishAniLogin(gen)
 
 			if err != nil && !errors.Is(err, context.Canceled) {
 				guiError("Kouki: AniList", err.Error())
@@ -497,32 +559,19 @@ func guiAction(name string) {
 			messageBox("Kouki: MyAnimeList", malCredentialsHint, mbOK|mbIconError)
 			return
 		}
-		// Guard against a login already in progress: a second listener on the
-		// same port is what produced "bind: only one usage of each socket
-		// address is normally permitted". Cancel the running one first, mirroring
-		// the tray handler.
-		malLoginCancelMu.Lock()
-		if malLoginCancelFunc != nil {
-			malLoginCancelFunc()
-			malLoginCancelFunc = nil
-			malLoginCancelMu.Unlock()
+		// Publish the cancel function before starting the goroutine, so a
+		// second click from either the window or tray sees this attempt.
+		loginCtx, gen, canceled := startOrCancelMALLogin(context.Background())
+		refreshAuthMenu()
+		if canceled {
 			return
 		}
-		malLoginCancelMu.Unlock()
-
 		go func() {
-			loginCtx, loginCancel := context.WithCancel(context.Background())
-			malLoginCancelMu.Lock()
-			malLoginCancelFunc = loginCancel
-			malLoginCancelMu.Unlock()
-
 			if err := malOAuthLogin(loginCtx, cfg); err != nil && !errors.Is(err, context.Canceled) {
 				guiError("Kouki: MyAnimeList", err.Error())
 			}
 
-			malLoginCancelMu.Lock()
-			malLoginCancelFunc = nil
-			malLoginCancelMu.Unlock()
+			finishMALLogin(gen)
 
 			store.Load()
 			refreshAuthMenu()
@@ -651,8 +700,9 @@ func guiAction(name string) {
 
 // storeSaveQueued and storeSaveMu drive the deferred write below.
 var (
-	storeSaveMu     sync.Mutex
-	storeSaveQueued bool
+	storeSaveMu      sync.Mutex
+	storeSaveQueued  bool
+	storeSaveRunning bool
 )
 
 // storeSaveAsync persists the store without blocking walk's thread.
@@ -669,17 +719,25 @@ var (
 func storeSaveAsync() {
 	storeSaveMu.Lock()
 	storeSaveQueued = true
+	if storeSaveRunning {
+		storeSaveMu.Unlock()
+		return
+	}
+	storeSaveRunning = true
 	storeSaveMu.Unlock()
 
 	go func() {
-		storeSaveMu.Lock()
-		for storeSaveQueued {
+		for {
+			storeSaveMu.Lock()
+			if !storeSaveQueued {
+				storeSaveRunning = false
+				storeSaveMu.Unlock()
+				return
+			}
 			storeSaveQueued = false
 			storeSaveMu.Unlock()
 			store.Save()
-			storeSaveMu.Lock()
 		}
-		storeSaveMu.Unlock()
 	}()
 }
 

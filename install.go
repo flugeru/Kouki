@@ -1,3 +1,5 @@
+//go:build windows
+
 package main
 
 // install.go — installation layout, configuration locations and the small
@@ -38,7 +40,7 @@ import (
 
 const (
 	appName    = "Kouki"
-	appVersion = "1.0.2"
+	appVersion = "1.1.0"
 	// appTagline is the one-line description under the wordmark in the header.
 	// It describes what the application does, not what it integrates with: a
 	// tagline naming a third party goes stale the moment that feature changes.
@@ -55,7 +57,7 @@ const (
 
 	// setupExeName is the Inno Setup package, looked up next to the binary and in
 	// the user's Downloads folder so "Reinstall" can relaunch it.
-	setupExeName = "Kouki-1.0.2-Setup.exe"
+	setupExeName = "Kouki-1.1.0-Setup.exe"
 
 	// appSingleInstPort is the loopback port used as the single-instance guard.
 	appSingleInstPort = 45222

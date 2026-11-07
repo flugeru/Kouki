@@ -3,9 +3,9 @@
   <assemblyIdentity
       type="win32"
       name="Kouki"
-      version="1.0.0.0"
+      version="1.1.0.0"
       processorArchitecture="amd64"/>
-  <description>Kouki — Discord Rich Presence para mpv</description>
+  <description>Kouki — contas, reprodução e progresso</description>
 
   <!-- Request per-monitor DPI awareness so the installer UI scales correctly on
        high-DPI displays. -->
