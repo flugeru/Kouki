@@ -1,0 +1,45 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main, refactor/windows-review]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Testar
+        run: go test ./...
+
+      - name: Analisar
+        run: go vet ./...
+
+      - name: Executar smoke test do binário
+        shell: pwsh
+        run: |
+          go build -trimpath -o Kouki-smoke.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $version = & .\Kouki-smoke.exe --version
+          if ($LASTEXITCODE -ne 0 -or $version -notmatch '^Kouki [0-9]+\.[0-9]+') {
+            throw "Versão inesperada: $version"
+          }
+
+      - name: Compilar aplicativo Windows
+        shell: pwsh
+        run: |
+          go build -trimpath -ldflags='-H=windowsgui -s -w' -o Kouki.exe .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path -LiteralPath Kouki.exe)) { throw 'Kouki.exe não foi gerado' }

@@ -1610,7 +1610,13 @@ func (u *uiCanvas) armLeaveCheck() {
 	}
 	u.leaveArmed = true
 	time.AfterFunc(150*time.Millisecond, func() {
+		if guiIsQuitting.Load() {
+			return
+		}
 		u.cw.Synchronize(func() {
+			if guiIsQuitting.Load() || u.cw.Handle() == 0 {
+				return
+			}
 			u.leaveArmed = false
 			if !u.cursorInCanvas() {
 				u.mouseIn = false
@@ -1756,6 +1762,14 @@ func (u *uiCanvas) scrollBy(delta int) {
 	}
 	actual := newScroll - u.scroll
 	u.scroll = newScroll
+	// ScrollWindowEx moves the pixels immediately, while WM_PAINT can arrive
+	// later. Move the cached hit-test rectangles at the same time so a click in
+	// that interval lands on the control currently visible under the pointer.
+	u.shiftCachedLayout(-actual)
+	if u.scrollbarHas {
+		travel := u.scrollbarTrackH - u.scrollbarThumbH
+		u.scrollbarThumbY = u.scrollbarTrackY + travel*u.scroll/maxScroll
+	}
 
 	hwnd := uintptr(u.cw.Handle())
 	if procScrollWindowEx.Find() == nil {
@@ -1774,6 +1788,24 @@ func (u *uiCanvas) scrollBy(delta int) {
 			Width: u.scrollbarW, Height: u.scrollbarTrackH,
 		})
 	}
+	if u.mouseIn && !u.scrollDrag {
+		if idx := u.hitAt(u.mouseX, u.mouseY); idx != u.hoverIdx {
+			u.applyHover(idx)
+		}
+	}
+}
+
+// shiftCachedLayout keeps input geometry aligned with the pixels moved by
+// ScrollWindowEx until paint rebuilds it from the current scroll offset.
+func (u *uiCanvas) shiftCachedLayout(dy int) {
+	for i := range u.cards {
+		u.cards[i].rect.Y += dy
+	}
+	for i := range u.items {
+		u.items[i].rect.Y += dy
+	}
+	u.headerRect.Y += dy
+	u.headerDividerY += dy
 }
 
 // ensureVisible scrolls just enough to bring a control fully into view.

@@ -95,14 +95,22 @@ O MPV empacotado é o build do usuário (shinchiro) e **não** traz `libmpv-2.dl
 
 ## Compilando
 
-Requisitos: **Go 1.26+** e **Inno Setup 6**.
+Requisitos: **Go 1.26+**. O instalador também requer **Inno Setup 6** e
+`assets\mpv\mpv.exe` (prepare com `-MpvSource` quando ainda não estiver presente).
 
 ```powershell
-.\tools\build.ps1                    # build completo
-.\tools\build.ps1 -SkipInstaller     # sem o instalador
+.\tools\build.ps1 -MpvSource C:\caminho\para\mpv  # pacote com MPV
+.\tools\build.ps1 -SkipInstaller                  # apenas Kouki.exe
 ```
 
-Saída em `dist\`: `Kouki-1.0.2-Setup.exe`, `COMO-INSTALAR.txt`, `kouki.ico`, `THIRD-PARTY-NOTICES.md`.
+Antes de compilar, execute `go test ./...` e `go vet ./...`. Para um pacote
+com MPV, passe `-MpvSource C:\caminho\para\mpv`. Sem esse parâmetro, o
+script reutiliza somente o conteúdo já preparado em `assets\mpv` e não
+copia arquivos do perfil do usuário. Com `-SkipInstaller`, o executável
+pode usar uma instalação externa do MPV.
+
+Saída em `dist\` quando o instalador é incluído: `Kouki-1.0.2-Setup.exe`,
+`COMO-INSTALAR.txt`, `kouki.ico`, `THIRD-PARTY-NOTICES.md`.
 
 ---
 
